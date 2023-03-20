@@ -1,8 +1,8 @@
 package main
 
 import (
-	"JWCache/controller"
-	"JWCache/jwCache"
+	"JWCache/dao"
+	"JWCache/https"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,7 +16,7 @@ var db = map[string]string{
 }
 
 func main() {
-	jwCache.NewGroup("scores", 2<<10, jwCache.GetterFunc(
+	dao.NewGroup("scores", 2<<10, dao.GetterFunc(
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] search key", key)
 			if v, ok := db[key]; ok {
@@ -26,7 +26,7 @@ func main() {
 		}))
 
 	addr := "localhost:9999"
-	peers := controller.NewPool(addr)
-	log.Println("jwCache is running at ", addr)
+	peers := https.NewPool(addr)
+	log.Println("dao is running at ", addr)
 	log.Fatal(http.ListenAndServe(addr, peers))
 }
