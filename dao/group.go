@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"JWCache/nodes"
 	"fmt"
 	"log"
 	"sync"
@@ -19,9 +20,39 @@ func (f GetterFunc) Get(key string) ([]byte, error) {
 
 // Group 不同分组，相当于命名空间
 type Group struct {
-	name      string
-	getter    Getter
-	mainCache cache
+	name      string           // 组名
+	getter    Getter           // 回调函数，当在缓存中没有查询到数据时，去调用回调函数获取数据
+	mainCache cache            // 缓存的具体实现
+	nodes     nodes.NodePicker // 节点
+}
+
+// RegisterNodes 注册节点
+func (g *Group) RegisterNodes(nodes nodes.NodePicker) {
+	if g.nodes != nil {
+		panic("RegisterNodePicker called more than once")
+	}
+	g.nodes = nodes
+}
+
+func (g *Group) load(key string) (value ByteView, err error) {
+	if g.nodes != nil {
+		if node, ok := g.nodes.PickNode(key); ok {
+			if value, err = g.GetFromNode(node, key); err == nil {
+				return value, nil
+			}
+			log.Println("[JWCache] Failed to get for node", err)
+		}
+	}
+	return g.getLocally(key)
+}
+
+// GetFromNode 从指定节点中获取数据
+func (g *Group) GetFromNode(node nodes.NodeGetter, key string) (ByteView, error) {
+	bytes, err := node.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{bytes: bytes}, nil
 }
 
 // Get 根据key获取组内的值，若没有获取到，抛出异常
@@ -30,7 +61,8 @@ func (g *Group) Get(key string) (ByteView, error) {
 		return ByteView{}, fmt.Errorf("key is required")
 	}
 	if v, ok := g.mainCache.get(key); ok {
-		log.Println("[JwCache] hit")
+		// todo 为了方便测试，这里暂时不打印该日志
+		//log.Println("[JwCache] hit")
 		return v, nil
 	}
 	// 尝试从其他数据源获取
@@ -38,9 +70,9 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 
 // 从其他数据源获取数据
-func (g *Group) load(key string) (value ByteView, err error) {
-	return g.getLocally(key)
-}
+//func (g *Group) load(key string) (value ByteView, err error) {
+//	return g.getLocally(key)
+//}
 
 // 调用Getter从其他数据源获取数据，若获取到数据，将该数据存入缓存中
 func (g *Group) getLocally(key string) (ByteView, error) {
