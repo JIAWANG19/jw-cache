@@ -2,13 +2,13 @@ package dao
 
 import "container/list"
 
-// Cache 使用LRU(最近最少未使用)作为淘汰策略，于是需要ll记录访问频率
+// Cache 定义了LRU Cache的基本数据结构
 type Cache struct {
 	maxBytes  int64                         // 允许使用的最大内存
-	nowBytes  int64                         // 已使用的内存
-	ll        *list.List                    // 记录访问频率，越是最近被使用的记录越不容易被淘汰
-	cache     map[string]*list.Element      // map
-	OnEvicted func(key string, value Value) // 记录被删除时的回调函数
+	nowBytes  int64                         // 当前已使用的内存
+	ll        *list.List                    // 双向链表，记录访问频率，越是最近被使用的记录越不容易被淘汰
+	cache     map[string]*list.Element      // 哈希表，记录每个键对应的值在链表中的位置
+	OnEvicted func(key string, value Value) // 记录被删除时的回调函数，可选参数
 }
 
 type entry struct {

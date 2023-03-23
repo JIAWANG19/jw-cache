@@ -69,11 +69,71 @@ LRU算法的优点包括：
 
 group cache使用**最近最少使用(LRU)**作为缓存的淘汰策略
 
+#### Cache
 
+在 LRU 缓存算法中，Cache 是 LRU Cache 的基本数据结构，它用于存储和管理缓存中的数据。Cache 是一个有容量限制的缓存，缓存的数据以键值对的形式存储，可以快速地添加、查询、删除数据。同时，Cache 还需要支持淘汰算法，以保证缓存的容量不会超过规定的最大容量。
 
-## 单机并发缓存
+**基本数据结构**：
+
+```go
+type Cache struct {
+    maxBytes  int64
+    nowBytes  int64
+    ll        *list.List
+    cache     map[string]*list.Element
+    OnEvicted func(key string, value Value)
+}
+```
+
+其中，`Cache` 结构体包含以下成员：
+
+- `maxBytes`：最大内存限制
+- `nowBytes`：当前已使用的内存
+- `ll`：双向链表，用于记录每个键值对的访问频率，频率越高的越靠近链表头部，越不容易被淘汰
+- `cache`：哈希表，用于记录每个键对应的值在链表中的位置
+- `OnEvicted`：记录被删除时的回调函数，可选参数
+
+**方法**：
+
+| 方法名 | 输入参数                                      | 输出参数                  | 功能描述                                                     |
+| ------ | --------------------------------------------- | ------------------------- | ------------------------------------------------------------ |
+| New    | maxBytes int64, onEvicted func(string, Value) | *Cache                    | 创建并初始化 Cache 对象                                      |
+| Get    | key string                                    | value Value, success bool | 查找 Cache 中对应 key 的值，若查找成功，则将该节点移至队首   |
+| Remove | 无                                            | 无                        | 删除 Cache 中最近最少使用的节点                              |
+| Add    | key string, value Value                       | 无                        | 将键值对存入 Cache 中，并将被操作的节点移到队列的队首，若发现已使用内存超过了最大内存，则调用回收方法 |
+
+#### Group
+
+在分布式缓存中，Group是一个重要的概念，其作用主要是对一组缓存数据进行管理和封装，包括缓存命名空间的隔离、缓存数据的过期策略、缓存数据的加载、缓存数据的修改和删除等。通过对缓存数据进行分组管理，可以更方便地对缓存进行管理和维护。
+
+**基本数据结构**：
+
+```go
+// Group lru算法中的分组，相当于命名空间
+type Group struct {
+	name      string              // 组名，用于区分不同的缓存组
+	getter    Getter              // 回调函数，当在缓存中没有查询到数据时，去调用回调函数获取数据
+	mainCache cache               // 缓存的具体实现，使用 lru.Cache 实现缓存淘汰策略
+	nodes     nodes.NodePicker    // 节点选择器，用于选择要缓存到哪个节点，从哪个节点获取数据，实现分布式缓存
+	loader    *singleflight.Group // 防止缓存击穿的实现，保证只有一个 goroutine 去加载缓存
+}
+```
+
+**方法**：
+
+| 方法                                           | 说明                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| load(key string)                               | 根据key加载缓存，会根据节点选择器选择节点，若选择到了节点，则会从该节点获取数据，否则会从回调函数中获取数据 |
+| GetFromNode(node nodes.NodeGetter, key string) | 从指定节点中获取数据                                         |
+| Get(key string)                                | 根据key获取组内的值，若没有获取到，会尝试从其他数据源获取    |
+| getLocally(key string)                         | 调用Getter从其他数据源获取数据，若获取到数据，将该数据存入缓存中 |
+| populateCache(key string, value ByteView)      | 将获取到的数据存入缓存中                                     |
 
 ## HTTP服务端
+
+Go语言中的标准库中包含了一个HTTP包，也称为net/http包，提供了一个HTTP客户端和服务器的实现。这个包提供了一系列的函数和类型，可以用于创建HTTP服务器和客户端，并处理HTTP请求和响应。
+
+
 
 ## 一致性哈希
 

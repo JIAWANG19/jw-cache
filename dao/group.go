@@ -13,19 +13,20 @@ type Getter interface {
 	Get(key string) ([]byte, error)
 }
 
+// GetterFunc 函数类型，实现了Getter接口中的Get方法
 type GetterFunc func(key string) ([]byte, error)
 
 func (f GetterFunc) Get(key string) ([]byte, error) {
 	return f(key)
 }
 
-// Group 不同分组，相当于命名空间
+// Group lru算法中的分组，相当于命名空间
 type Group struct {
-	name      string              // 组名
+	name      string              // 组名，用于区分不同的缓存组
 	getter    Getter              // 回调函数，当在缓存中没有查询到数据时，去调用回调函数获取数据
-	mainCache cache               // 缓存的具体实现
-	nodes     nodes.NodePicker    // 节点
-	loader    *singleflight.Group // 防止缓存击穿的实现
+	mainCache cache               // 缓存的具体实现，使用 lru.Cache 实现缓存淘汰策略
+	nodes     nodes.NodePicker    // 节点选择器，用于选择要缓存到哪个节点，从哪个节点获取数据，实现分布式缓存
+	loader    *singleflight.Group // 防止缓存击穿的实现，保证只有一个 goroutine 去加载缓存
 }
 
 // RegisterNodes 注册节点
@@ -36,6 +37,7 @@ func (g *Group) RegisterNodes(nodes nodes.NodePicker) {
 	g.nodes = nodes
 }
 
+// load 根据key加载缓存，会根据节点选择器选择节点，若选择到了节点，则会从该节点获取数据，否则会从回调函数中获取数据
 func (g *Group) load(key string) (value ByteView, err error) {
 	view, err := g.loader.Do(key, func() (interface{}, error) {
 		if g.nodes != nil {
@@ -53,15 +55,6 @@ func (g *Group) load(key string) (value ByteView, err error) {
 		return view.(ByteView), nil
 	}
 	return
-	//if g.nodes != nil {
-	//	if node, ok := g.nodes.PickNode(key); ok {
-	//		if value, err = g.GetFromNode(node, key); err == nil {
-	//			return value, nil
-	//		}
-	//		log.Println("[JWCache] Failed to get for node", err)
-	//	}
-	//}
-	//return g.getLocally(key)
 }
 
 // GetFromNode 从指定节点中获取数据
@@ -87,11 +80,6 @@ func (g *Group) Get(key string) (ByteView, error) {
 	return g.load(key)
 }
 
-// 从其他数据源获取数据
-//func (g *Group) load(key string) (value ByteView, err error) {
-//	return g.getLocally(key)
-//}
-
 // 调用Getter从其他数据源获取数据，若获取到数据，将该数据存入缓存中
 func (g *Group) getLocally(key string) (ByteView, error) {
 	bytes, err := g.getter.Get(key)
@@ -103,6 +91,7 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 	return value, nil
 }
 
+// populateCache 将获取到的数据存入缓存中
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value)
 }
