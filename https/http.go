@@ -1,7 +1,7 @@
 package https
 
 import (
-	"JWCache/dao"
+	"JWCache/cache"
 	"JWCache/hashes"
 	"JWCache/nodes"
 	"fmt"
@@ -54,7 +54,7 @@ func (p *ConnectHTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	groupName, key := parts[0], parts[1]
-	group := dao.GetGroup(groupName)
+	group := cache.GetGroup(groupName)
 	if group == nil {
 		http.Error(w, "no such group: "+groupName, http.StatusNotFound)
 		return

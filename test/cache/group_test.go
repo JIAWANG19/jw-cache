@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"JWCache/dao"
+	"JWCache/cache"
 	"fmt"
 	"log"
 	"reflect"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestGetter(t *testing.T) {
-	var f dao.Getter = dao.GetterFunc(func(key string) ([]byte, error) {
+	var f cache.Getter = cache.GetterFunc(func(key string) ([]byte, error) {
 		return []byte(key), nil
 	})
 	expect := []byte("key")
@@ -27,7 +27,7 @@ var db = map[string]string{
 
 func TestGroupGet(t *testing.T) {
 	loadCounts := make(map[string]int, len(db))
-	cache := dao.NewGroup("mysql", 2<<10, dao.GetterFunc(
+	cache := cache.NewGroup("mysql", 2<<10, cache.GetterFunc(
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] search key", key)
 			if v, ok := db[key]; ok {

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"JWCache/dao"
+	"JWCache/cache"
 	"JWCache/https"
 	"flag"
 	"fmt"
@@ -18,8 +18,8 @@ var db = map[string]string{
 }
 
 // 创建一个组
-func createGroup() *dao.Group {
-	return dao.NewGroup("scores", 2<<10, dao.GetterFunc(
+func createGroup() *cache.Group {
+	return cache.NewGroup("scores", 2<<10, cache.GetterFunc(
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] search key", key)
 			if v, ok := db[key]; ok {
@@ -30,7 +30,7 @@ func createGroup() *dao.Group {
 }
 
 // 根据 addr
-func startCacheServer(addr string, addresses []string, group *dao.Group) {
+func startCacheServer(addr string, addresses []string, group *cache.Group) {
 	nodes := https.NewHTTPPool(addr)
 	nodes.Set(addresses...)
 	group.RegisterNodes(nodes)
@@ -38,7 +38,7 @@ func startCacheServer(addr string, addresses []string, group *dao.Group) {
 	log.Fatal(http.ListenAndServe(addr[7:], nodes))
 }
 
-func startAPIServer(apiAddr string, group *dao.Group) {
+func startAPIServer(apiAddr string, group *cache.Group) {
 	http.Handle("/api", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			key := r.URL.Query().Get("key")
