@@ -1,8 +1,8 @@
 package cache
 
 import (
-	"JWCache/cache"
 	"fmt"
+	"jw-cache/cache"
 	"log"
 	"reflect"
 	"testing"

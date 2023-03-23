@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"JWCache/cache"
+	"jw-cache/cache"
 	"testing"
 )
 

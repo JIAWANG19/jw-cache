@@ -1,9 +1,10 @@
 package cache
 
 import (
-	"JWCache/nodes"
-	"JWCache/singleflight"
 	"fmt"
+	pb "jw-cache/cachepb"
+	"jw-cache/nodes"
+	"jw-cache/singleflight"
 	"log"
 	"sync"
 )
@@ -58,12 +59,26 @@ func (g *Group) load(key string) (value ByteView, err error) {
 }
 
 // GetFromNode 从指定节点中获取数据
+//func (g *Group) GetFromNode(node nodes.NodeGetter, key string) (ByteView, error) {
+//	bytes, err := node.Get(g.name, key)
+//	if err != nil {
+//		return ByteView{}, err
+//	}
+//	return ByteView{bytes: bytes}, nil
+//}
+
+// GetFromNode 从指定节点中获取数据
 func (g *Group) GetFromNode(node nodes.NodeGetter, key string) (ByteView, error) {
-	bytes, err := node.Get(g.name, key)
+	req := &pb.Request{
+		Group: g.name,
+		Key:   key,
+	}
+	res := &pb.Response{}
+	err := node.Get(req, res)
 	if err != nil {
 		return ByteView{}, err
 	}
-	return ByteView{bytes: bytes}, nil
+	return ByteView{bytes: res.Value}, nil
 }
 
 // Get 根据key获取组内的值，若没有获取到，抛出异常

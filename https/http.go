@@ -1,11 +1,13 @@
 package https
 
 import (
-	"JWCache/cache"
-	"JWCache/hashes"
-	"JWCache/nodes"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"io"
+	"jw-cache/cache"
+	pb "jw-cache/cachepb"
+	"jw-cache/hashes"
+	"jw-cache/nodes"
 	"log"
 	"net/http"
 	"net/url"
@@ -61,12 +63,15 @@ func (p *ConnectHTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view, err := group.Get(key)
+
+	body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(view.ByteSlice())
+	//w.Write(view.ByteSlice())
+	w.Write(body)
 }
 
 // Set 设置节点(初始化传入节点)，建立节点与哈希值的映射关系
@@ -98,21 +103,44 @@ type httpGetter struct {
 }
 
 // Get 发送http请求去其他节点获取值
-func (p *httpGetter) Get(group string, key string) ([]byte, error) {
+func (p *httpGetter) Get(in *pb.Request, out *pb.Response) error {
 	// /baseURL?group=group&key=key
-	u := fmt.Sprintf("%v%v/%v", p.baseURL, url.QueryEscape(group), url.QueryEscape(key))
+	u := fmt.Sprintf("%v%v/%v",
+		p.baseURL,
+		url.QueryEscape(in.Group),
+		url.QueryEscape(in.Key))
 	res, err := http.Get(u)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned: %v", res.Status)
+		return fmt.Errorf("server returned: %v", res.Status)
 	}
 
 	bytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response body: %v", err)
+	if err = proto.Unmarshal(bytes, out); err != nil {
+		return fmt.Errorf("decoding response body: %v", err)
 	}
-	return bytes, nil
+	return nil
 }
+
+// Get 发送http请求去其他节点获取值
+//func (p *httpGetter) Get(group string, key string) ([]byte, error) {
+//	// /baseURL?group=group&key=key
+//	u := fmt.Sprintf("%v%v/%v", p.baseURL, url.QueryEscape(group), url.QueryEscape(key))
+//	res, err := http.Get(u)
+//	if err != nil {
+//		return nil, err
+//	}
+//	defer res.Body.Close()
+//	if res.StatusCode != http.StatusOK {
+//		return nil, fmt.Errorf("server returned: %v", res.Status)
+//	}
+//
+//	bytes, err := io.ReadAll(res.Body)
+//	if err != nil {
+//		return nil, fmt.Errorf("reading response body: %v", err)
+//	}
+//	return bytes, nil
+//}

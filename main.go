@@ -1,10 +1,10 @@
 package main
 
 import (
-	"JWCache/cache"
-	"JWCache/https"
 	"flag"
 	"fmt"
+	"jw-cache/cache"
+	"jw-cache/https"
 	"log"
 	"net/http"
 	"time"
