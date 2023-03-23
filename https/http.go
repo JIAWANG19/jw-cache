@@ -100,7 +100,7 @@ type httpGetter struct {
 // Get 发送http请求去获取值
 func (p *httpGetter) Get(group string, key string) ([]byte, error) {
 	// /baseURL?group=group&key=key
-	u := fmt.Sprintf("%v%v%v", p.baseURL, url.QueryEscape(group), url.QueryEscape(key))
+	u := fmt.Sprintf("%v%v/%v", p.baseURL, url.QueryEscape(group), url.QueryEscape(key))
 	res, err := http.Get(u)
 	if err != nil {
 		return nil, err

@@ -3,6 +3,7 @@ package main
 import (
 	"JWCache/dao"
 	"JWCache/https"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -81,5 +82,28 @@ func startAExample() {
 }
 
 func main() {
-	startAExample()
+	//startAExample()
+	var port int
+	var api bool
+	flag.IntVar(&port, "port", 8001, "JWCache server port")
+	flag.BoolVar(&api, "api", false, "Start a api server?")
+	flag.Parse()
+
+	apiAddr := "http://localhost:9999"
+	addrMap := map[int]string{
+		8001: "http://localhost:8001",
+		8002: "http://localhost:8002",
+		8003: "http://localhost:8003",
+	}
+
+	var addresses []string
+	for _, v := range addrMap {
+		addresses = append(addresses, v)
+	}
+
+	gee := createGroup()
+	if api {
+		go startAPIServer(apiAddr, gee)
+	}
+	startCacheServer(addrMap[port], addresses, gee)
 }

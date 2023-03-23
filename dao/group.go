@@ -2,6 +2,7 @@ package dao
 
 import (
 	"JWCache/nodes"
+	"JWCache/singleflight"
 	"fmt"
 	"log"
 	"sync"
@@ -20,10 +21,11 @@ func (f GetterFunc) Get(key string) ([]byte, error) {
 
 // Group 不同分组，相当于命名空间
 type Group struct {
-	name      string           // 组名
-	getter    Getter           // 回调函数，当在缓存中没有查询到数据时，去调用回调函数获取数据
-	mainCache cache            // 缓存的具体实现
-	nodes     nodes.NodePicker // 节点
+	name      string              // 组名
+	getter    Getter              // 回调函数，当在缓存中没有查询到数据时，去调用回调函数获取数据
+	mainCache cache               // 缓存的具体实现
+	nodes     nodes.NodePicker    // 节点
+	loader    *singleflight.Group // 防止缓存击穿的实现
 }
 
 // RegisterNodes 注册节点
@@ -35,15 +37,31 @@ func (g *Group) RegisterNodes(nodes nodes.NodePicker) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.nodes != nil {
-		if node, ok := g.nodes.PickNode(key); ok {
-			if value, err = g.GetFromNode(node, key); err == nil {
-				return value, nil
+	view, err := g.loader.Do(key, func() (interface{}, error) {
+		if g.nodes != nil {
+			if node, ok := g.nodes.PickNode(key); ok {
+				if value, err = g.GetFromNode(node, key); err == nil {
+					return value, nil
+				}
+				log.Println("[JWCache] Failed to get for node", err)
 			}
-			log.Println("[JWCache] Failed to get for node", err)
 		}
+		return g.getLocally(key)
+	})
+
+	if err == nil {
+		return view.(ByteView), nil
 	}
-	return g.getLocally(key)
+	return
+	//if g.nodes != nil {
+	//	if node, ok := g.nodes.PickNode(key); ok {
+	//		if value, err = g.GetFromNode(node, key); err == nil {
+	//			return value, nil
+	//		}
+	//		log.Println("[JWCache] Failed to get for node", err)
+	//	}
+	//}
+	//return g.getLocally(key)
 }
 
 // GetFromNode 从指定节点中获取数据
@@ -105,6 +123,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		name:      name,
 		getter:    getter,
 		mainCache: cache{cacheBytes: cacheBytes},
+		loader:    &singleflight.Group{},
 	}
 	groups[name] = g
 	return g
