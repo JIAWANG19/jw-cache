@@ -7,21 +7,20 @@ import (
 )
 
 /**
-一致性哈希：
-	使用相同的哈希算法计算key和节点名称的哈希值，从而实现一致性哈希
-节点变化时：
-	根据key值获取到hash，再去获取其节点名称，获取节点名称的逻辑是：
-		找到第一个在keys中大于该hash的坐标，再根据该坐标去hashMap中获取节点
+一致性哈希是一种用于分布式系统中数据存储和负载均衡的算法。在一致性哈希中，每个节点都被映射到一个哈希环上，数据的key也被映射到哈希环上。
+通过使用相同的哈希算法，节点名称和key都可以被转换为哈希值，从而可以将数据key映射到最接近的节点上。
+当有节点发生变化时，只需找到比该节点哈希值大的第一个节点，即可将数据迁移到该节点上。
+这种方法避免了大规模数据移动的问题，同时保持了数据的分布均衡。
 */
 
-// HashFunc 哈希函数，用于计算节点的hash值
+// HashFunc 哈希函数，用于计算的哈希值
 type HashFunc func(data []byte) uint32
 
 type Map struct {
-	hash     HashFunc       // hash 哈希函数
+	hash     HashFunc       // hash 用于计算哈希值的哈希函数
 	replicas int            // replicas 一个真实节点对应虚拟节点的数量
-	keys     []int          // keys 表
-	hashMap  map[int]string // hashMap key值对应的真实节点名称
+	keys     []int          // keys 该变量是一个有序列表，包含所有的虚拟节点
+	hashMap  map[int]string // hashMap 该变量是一个哈希表，存储虚拟节点的哈希值和对应的真实节点名称
 }
 
 // New 创建一个 Map，如果哈希函数为空，使用默认的哈希函数

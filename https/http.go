@@ -14,17 +14,17 @@ import (
 )
 
 const (
-	defaultBasePath = "/_jw_cache/"
-	defaultReplicas = 50
+	defaultBasePath = "/_jw_cache/" // 表示默认的基础路径，即缓存池中缓存项的URL前缀，默认为"/_jw_cache/"
+	defaultReplicas = 50            // 表示默认的虚拟节点数，即每个节点在哈希环上的虚拟节点数，默认为50
 )
 
 // ConnectHTTPPool HTTP连接池
 type ConnectHTTPPool struct {
-	self       string                 // self 该池的连接的url地址
-	basePath   string                 // basePath 基本url前缀
-	mu         sync.Mutex             // mu 锁
-	nodes      *hashes.Map            // nodes 节点的哈希表
-	httpGetter map[string]*httpGetter // httpGetter todo
+	self       string                 // self 表示该池的连接的URL地址，即当前节点的地址
+	basePath   string                 // basePath 表示该池的连接的基础路径，即缓存池中缓存项的URL前缀
+	mu         sync.Mutex             // mu 互斥锁，用于保护节点列表的并发访问
+	nodes      *hashes.Map            // nodes 哈希表，用于记录哈希值与节点的对应关系
+	httpGetter map[string]*httpGetter // httpGetter 在当前节点获取不到缓存时，调用回调函数中其他节点获取
 }
 
 // NewHTTPPool 新建连接池
@@ -69,7 +69,7 @@ func (p *ConnectHTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(view.ByteSlice())
 }
 
-// Set 设置节点(初始化传入节点)，建立节点与key的映射关系
+// Set 设置节点(初始化传入节点)，建立节点与哈希值的映射关系
 func (p *ConnectHTTPPool) Set(nodes ...string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -81,7 +81,7 @@ func (p *ConnectHTTPPool) Set(nodes ...string) {
 	}
 }
 
-// PickNode 选择真实节点
+// PickNode 当在当前节点获取不到值时，选择一个最可能获取到值的节点
 func (p *ConnectHTTPPool) PickNode(key string) (nodes.NodeGetter, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -97,7 +97,7 @@ type httpGetter struct {
 	baseURL string
 }
 
-// Get 发送http请求去获取值
+// Get 发送http请求去其他节点获取值
 func (p *httpGetter) Get(group string, key string) ([]byte, error) {
 	// /baseURL?group=group&key=key
 	u := fmt.Sprintf("%v%v/%v", p.baseURL, url.QueryEscape(group), url.QueryEscape(key))

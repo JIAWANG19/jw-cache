@@ -133,7 +133,70 @@ type Group struct {
 
 Go语言中的标准库中包含了一个HTTP包，也称为net/http包，提供了一个HTTP客户端和服务器的实现。这个包提供了一系列的函数和类型，可以用于创建HTTP服务器和客户端，并处理HTTP请求和响应。
 
+### ConnectHTTPPool
 
+**基本数据结构**：
+
+```go
+const (
+	defaultBasePath = "/_jw_cache/" // 表示默认的基础路径，即缓存池中缓存项的URL前缀，默认为"/_jw_cache/"
+	defaultReplicas = 50            // 表示默认的虚拟节点数，即每个节点在哈希环上的虚拟节点数，默认为50
+)
+
+// ConnectHTTPPool HTTP连接池
+type ConnectHTTPPool struct {
+	self       string                 // self 表示该池的连接的URL地址，即当前节点的地址
+	basePath   string                 // basePath 表示该池的连接的基础路径，即缓存池中缓存项的URL前缀
+	mu         sync.Mutex             // mu 互斥锁，用于保护节点列表的并发访问
+	nodes      *hashes.Map            // nodes 哈希表，用于记录哈希值与节点的对应关系
+	httpGetter map[string]*httpGetter // httpGetter 在当前节点获取不到缓存时，调用回调函数中其他节点获取
+}
+```
+
+**方法**：
+
+| 方法名         | 描述                                                     |
+| -------------- | -------------------------------------------------------- |
+| Log            | 方便打印日志                                             |
+| ServeHTTP      | 处理HTTP请求，用于获取缓存值                             |
+| Set            | 设置节点，并建立节点与哈希值的映射关系                   |
+| PickNode       | 当当前节点获取不到缓存值时，选择一个最可能获取到值的节点 |
+| httpGetter.Get | 发送HTTP请求去其他节点获取缓存值                         |
+
+其中，最核心的方法就是`ServeHTTP`方法
+
+```go
+// ServerHTTP HTTP 请求解析
+func (p *ConnectHTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+   // 请求需要请求前缀
+   if !strings.HasPrefix(r.URL.Path, p.basePath) {
+      panic("ConnectHTTPPool serving unexpected path: " + r.URL.Path)
+   }
+   p.Log("%s %s", r.Method, r.URL.Path)
+   // 请求格式应当为：/basePath/groupName/key
+   parts := strings.SplitN(r.URL.Path[len(p.basePath):], "/", 2)
+   if len(parts) != 2 {
+      http.Error(w, "bad request", http.StatusBadRequest)
+      return
+   }
+
+   groupName, key := parts[0], parts[1]
+   // 获取组
+   group := cache.GetGroup(groupName)
+   if group == nil {
+      http.Error(w, "no such group: "+groupName, http.StatusNotFound)
+      return
+   }
+   // 从组中获取数据
+   view, err := group.Get(key)
+   if err != nil {
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+   }
+
+   w.Header().Set("Content-Type", "application/octet-stream")
+   w.Write(view.ByteSlice())
+}
+```
 
 ## 一致性哈希
 
@@ -160,6 +223,29 @@ Go语言中的标准库中包含了一个HTTP包，也称为net/http包，提供
 
 总的来说，一致性哈希算法是一种常用的分布式缓存和负载均衡的解决方案，它具有良好的可扩展性、灵活性和可靠性，是一种比较成熟和有效的算法。
 
-### 解决节点负载不均衡的问题
+**group cache使用虚拟节点的方式来解决节点负载不均衡的问题**
 
-## 分布式节点
+### Map
+
+**基本数据结构**：
+
+```go
+// HashFunc 哈希函数，用于计算的哈希值
+type HashFunc func(data []byte) uint32
+
+type Map struct {
+   hash     HashFunc       // hash 用于计算哈希值的哈希函数
+   replicas int            // replicas 一个真实节点对应虚拟节点的数量
+   keys     []int          // keys 该变量是一个有序列表，包含所有的虚拟节点
+   hashMap  map[int]string // hashMap 该变量是一个哈希表，存储虚拟节点的哈希值和对应的真实节点名称
+}
+```
+
+**方法**：
+
+| 方法名 | 功能                        | 参数                              | 返回值 |
+| ------ | --------------------------- | --------------------------------- | ------ |
+| New    | 创建一个Map对象             | replicas: int, hashFunc: HashFunc | *Map   |
+| Add    | 添加一个或多个节点到Map对象 | keys ...string                    | void   |
+| Get    | 根据key获取节点名称         | key: string                       | string |
+
