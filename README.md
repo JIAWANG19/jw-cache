@@ -261,3 +261,200 @@ type Map struct {
 | Add    | 添加一个或多个节点到Map对象 | keys ...string                    | void   |
 | Get    | 根据key获取节点名称         | key: string                       | string |
 
+## 防止缓存击穿
+
+### 缓存击穿
+
+缓存击穿是指当一个非常热门的数据缓存过期或者被清空时，同时有大量的请求涌入数据库或其他持久层，导致缓存失效，从而产生大量的请求直接落到了持久层，导致持久层负载过高，甚至宕机的情况。缓存击穿通常会导致系统的响应时间变慢，甚至崩溃。
+
+缓存击穿一般是由以下原因导致的：
+
+1. 缓存失效：当一个热门的数据缓存过期或者被清空时，同时有大量的请求涌入系统，导致缓存失效。
+2. 热点数据：当某个数据被频繁访问时，它就成为了热点数据。当这个热点数据的缓存失效时，会导致大量的请求涌入系统，从而导致缓存击穿。
+3. 数据库压力：当缓存失效后，大量请求直接访问数据库，导致数据库压力过大。
+
+为了解决缓存击穿问题，通常采用以下方法：
+
+1. 缓存预热：在系统启动时，提前将热点数据加载到缓存中，避免在缓存失效时，大量请求直接访问数据库。
+2. 数据库查询结果为空时，也要将这个key对应的value设置到缓存中，这样下次相同的请求就能从缓存中获取到数据，避免访问数据库。
+3. 采用分布式缓存：通过将缓存数据分布到多个节点上，可以降低单个节点的负载压力，避免出现缓存击穿的情况。
+4. 采用布隆过滤器：通过布隆过滤器判断一个 key 是否在缓存中存在，如果不存在，直接返回，避免了大量请求直接访问数据库的情况。
+5. 缓存数据设置不同的过期时间：通过给不同的 key 设置不同的过期时间，避免多个 key 同时过期导致缓存击穿的情况。
+
+### 使用分布式节点防止缓存击穿
+
+分布式节点防止缓存击穿的原理是在缓存集群的多个节点之间分配缓存数据，从而将缓存数据分散到多个节点上，同时在缓存失效时，避免大量的请求集中到一个节点上进行数据库查询操作。
+
+具体来说，当一个缓存键失效时，多个并发请求会同时到达缓存集群中的不同节点，因为缓存数据被分配到了多个节点上。这时，每个节点会先检查自己的缓存中是否存在该键的缓存数据，如果存在，就返回缓存数据给请求方；如果不存在，该节点会向数据库发起查询请求，查询到数据后再更新自己的缓存，并返回结果给请求方。
+
+同时，为了防止多个节点同时查询数据库，需要通过某种机制对请求进行调度和限制。一种常见的方式是使用分布式锁，对相同的缓存键进行加锁，避免多个节点同时访问数据库。另外一种方式是使用一致性哈希算法，将缓存键分配到不同的节点上，从而保证每个节点都有机会响应请求。
+
+**定义接口**：
+
+```go
+type NodePicker interface { // 节点选择器接口
+	PickNode(key string) (node NodeGetter, ok bool)
+}
+
+type NodeGetter interface { // 从远程节点获取值
+	Get(in *pb.Request, out *pb.Response) error
+}
+```
+
+**实现方法**：
+
+```go
+// PickNode 当在当前节点获取不到值时，选择一个最可能获取到值的节点
+func (p *ConnectHTTPPool) PickNode(key string) (nodes.NodeGetter, bool) {
+   p.mu.Lock()
+   defer p.mu.Unlock()
+   if node := p.nodes.Get(key); node != "" && node != p.self {
+      p.Log("Pick Node %s", node)
+      return p.httpGetter[node], true
+   }
+   return nil, false
+}
+
+// Get 发送http请求去其他节点获取值
+func (p *httpGetter) Get(in *pb.Request, out *pb.Response) error {
+	// /baseURL?group=group&key=key
+	u := fmt.Sprintf("%v%v/%v",
+		p.baseURL,
+		url.QueryEscape(in.Group),
+		url.QueryEscape(in.Key))
+	res, err := http.Get(u)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned: %v", res.Status)
+	}
+
+	bytes, err := io.ReadAll(res.Body)
+	if err = proto.Unmarshal(bytes, out); err != nil { // proto.Unmarshal() 将二进制数据反序列化为消息对象
+		return fmt.Errorf("decoding response body: %v", err)
+	}
+	return nil
+}
+```
+
+### 使用互斥锁防止缓存击穿
+
+假设在一个分布式系统中，有一个名为 Tom 的缓存 key。现在有 N 个并发请求通过 HTTP 访问缓存系统，其中 8003 节点向 8001 节点发起了 N 次请求。如果对于数据库访问没有做任何限制，那么很可能会产生 N 次对数据库的访问，从而容易导致缓存击穿和穿透问题。即使已经针对数据库做了防护，但是由于 HTTP 请求是非常耗费资源的操作，因此在针对相同的 key 进行访问时，8003 节点向 8001 节点发起三次请求是没有必要的。因此，在分布式系统中，可以采用互斥锁的方式来保证只有一个请求去访问节点 。
+
+```go
+// Do 防止缓存击穿的实现，当相同的key并发的请求时，该方法可以保证fn函数只被调用一次
+func (g *Group) Do(key string, fn func() (interface{}, error)) (interface{}, error) {
+   g.mu.Lock()           // 先上锁
+   if g.callMap == nil { // 延迟加载
+      g.callMap = make(map[string]*call)
+   }
+   if c, ok := g.callMap[key]; ok { // 如果有相同的key正在请求，则等待
+      g.mu.Unlock()       // 解锁
+      c.wg.Wait()         // 等待key请求完成
+      return c.val, c.err // 返回key请求的结果
+   }
+   aCall := new(call)
+   aCall.wg.Add(1)        // 发起请求前加锁，使请求结束前的所有与该请求相同的key阻塞
+   g.callMap[key] = aCall // 添加到 g.callMap
+   g.mu.Unlock()
+
+   aCall.val, aCall.err = fn() // 调用方法获取key的值
+   aCall.wg.Done()             // 请求解锁
+
+   g.mu.Lock()
+   delete(g.callMap, key) // 更新 g.callMap
+   g.mu.Unlock()
+
+   return aCall.val, aCall.err
+}
+```
+
+该方法使用了 sync 包中的锁和 WaitGroup 实现了对相同 key 的并发请求进行阻塞，确保 fn 函数只被调用一次，从而避免了缓存穿透的问题。主要流程如下：
+
+1. 首先获取锁，然后判断 g.callMap 是否为空，如果为空，则新建一个 g.callMap。
+2. 接着判断 key 是否在 g.callMap 中已经有值，如果有则等待。否则，新建一个 call 对象，并将其添加到 g.callMap 中。
+3. 在发起请求前，需要在 aCall 对象上加锁，这样就能保证在请求结束之前，所有与该请求相同的 key 都将被阻塞。
+4. 然后调用 fn 方法获取 key 的值，获取完成后解锁。
+5. 最后，需要再次获取锁来更新 g.callMap，并返回结果。
+
+## 使用 Protobuf 进行通信
+
+Protocol Buffers（简称 Protobuf）是一种轻量级的数据交换格式，它是由 Google 设计的，能够用于跨语言和平台的数据交换。Protobuf 通过使用二进制编码和压缩技术，使得数据传输和存储更加高效。它的基本原理如下：
+
+1. 定义 .proto 文件：使用 Protobuf 时需要先定义一个 .proto 文件，该文件使用 Protobuf 官方提供的语法定义消息类型、字段名、类型和顺序等信息。通过编写 .proto 文件来描述需要传输的数据结构。
+2. 编译 .proto 文件：在编写好 .proto 文件后，需要使用 Protobuf 的编译器将其编译成目标语言的代码，例如 C++、Java、Go 等。编译后生成的代码中包含了定义的消息类型、字段、序列化和反序列化等操作。
+3. 序列化：将结构化数据序列化为二进制格式。序列化时，Protobuf 将消息按照 .proto 文件中的定义进行编码，并压缩数据。由于使用了二进制编码和压缩技术，因此序列化后的数据通常比 JSON、XML 等其他格式的数据更小，更加高效。
+4. 反序列化：将二进制数据反序列化为结构化数据。反序列化时，Protobuf 读取二进制数据并按照 .proto 文件中的定义进行解码，生成结构化的数据。反序列化后的数据可以直接用于程序中的数据操作。
+
+Protobuf 的优点包括：高效、跨语言、可扩展、易于维护和版本控制等。由于采用二进制编码和压缩技术，因此 Protobuf 在数据传输和存储方面的性能表现更加出色。同时，由于使用了标准化的 .proto 文件来描述数据结构，因此 Protobuf 可以支持版本控制和升级。此外，Protobuf 还支持向后和向前兼容，即旧版本的消息可以被新版本的代码读取，而新版本的消息也可以被旧版本的代码读取。
+
+### 使用方法
+
+1. 定义 .proto 文件：首先需要定义一个 .proto 文件来描述数据的结构和格式。这个文件中定义了需要传输的消息的字段名称、类型、顺序等信息。这个文件需要使用 Protobuf 官方提供的语法进行编写。
+
+```protobuf
+syntax = "proto3";
+
+package cachepb;
+
+option go_package = "jw-cache/cachepb";
+
+message Request {
+  string group = 1;
+  string key = 2;
+}
+
+message Response {
+  bytes value = 1;
+}
+
+service GroupCache {
+  rpc Get(Request) returns (Response);
+}
+```
+
+2. 编译 .proto 文件：编写好 .proto 文件后，需要使用 Protobuf 的编译器将其编译成 Go 语言代码。
+
+3. 在 Go 项目中使用编译后的代码：编译 .proto 文件后会生成一些 .pb.go 文件，这些文件包含了 Protobuf 定义的数据结构和操作方法。在 Go 项目中需要使用这些代码来序列化和反序列化数据，或者使用这些代码生成消息对象进行通信。
+
+```go
+// ServerHTTP HTTP 请求解析
+func (p *ConnectHTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+   // ...
+   view, err := group.Get(key)
+
+   body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()})  // // 将消息对象序列化成二进制数据
+   if err != nil {
+      http.Error(w, err.Error(), http.StatusInternalServerError)
+   }
+
+   w.Header().Set("Content-Type", "application/octet-stream")
+   //w.Write(view.ByteSlice())
+   w.Write(body)
+}
+
+// Get 发送http请求去其他节点获取值
+func (p *httpGetter) Get(in *pb.Request, out *pb.Response) error {
+	// /baseURL?group=group&key=key
+	u := fmt.Sprintf("%v%v/%v",
+		p.baseURL,
+		url.QueryEscape(in.Group),
+		url.QueryEscape(in.Key))
+	res, err := http.Get(u)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned: %v", res.Status)
+	}
+
+	bytes, err := io.ReadAll(res.Body)
+	if err = proto.Unmarshal(bytes, out); err != nil {  // proto.Unmarshal() 将二进制数据反序列化为消息对象
+		return fmt.Errorf("decoding response body: %v", err)
+	}
+	return nil
+}
+```

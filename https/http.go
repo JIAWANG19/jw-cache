@@ -64,7 +64,7 @@ func (p *ConnectHTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	view, err := group.Get(key)
 
-	body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()})
+	body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()}) // 将消息对象序列化成二进制数据
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -119,7 +119,7 @@ func (p *httpGetter) Get(in *pb.Request, out *pb.Response) error {
 	}
 
 	bytes, err := io.ReadAll(res.Body)
-	if err = proto.Unmarshal(bytes, out); err != nil {
+	if err = proto.Unmarshal(bytes, out); err != nil { // proto.Unmarshal() 将二进制数据反序列化为消息对象
 		return fmt.Errorf("decoding response body: %v", err)
 	}
 	return nil
