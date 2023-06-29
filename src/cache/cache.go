@@ -119,10 +119,13 @@ type CacheValue interface {
 
 	// SetTimeout 过期时间
 	SetTimeout(timeout int64)
+
 	// SetNeverExpired 设置永不过期
 	SetNeverExpired()
+
 	// AdjustTimeout 调整过期时间
 	AdjustTimeout(adjustValue int64)
+
 	// Expired 检查缓存值是否已过期
 	Expired() bool
 }

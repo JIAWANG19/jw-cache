@@ -1,8 +1,6 @@
 package main
 
-import (
-	"jw-cache/src/pgk/log"
-)
+import "jw-cache/src/pgk/log"
 
 // 模拟一个数据源
 //var db = map[string]string{
@@ -75,8 +73,14 @@ import (
 //	startAPIServer(apiAddr, group)
 //}
 
+//func info(s string, v interface{}) {
+//	logger.Logger.Info("123123", v)
+//}
+
 func main() {
-	log.Info("123123")
+	log.Info("%s", "123123")
+	log.Info("%s", "123123")
+	//info("123")
 	//startAExample()
 	//var port int
 	//var api bool

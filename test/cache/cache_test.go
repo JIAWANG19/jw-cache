@@ -34,3 +34,7 @@ func TestRemove(t *testing.T) {
 		t.Fatalf("缓存失败")
 	}
 }
+
+func TestNewCache(t *testing.T) {
+	//lru_cache.LRUCacheEvict{cache.}
+}
