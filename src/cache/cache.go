@@ -1,6 +1,8 @@
 package cache
 
-import "container/list"
+import (
+	"container/list"
+)
 
 // Cache 定义了LRU Cache的基本数据结构
 type Cache struct {
@@ -76,4 +78,51 @@ func New(maxBytes int64, OnEvicted func(string, Value)) *Cache {
 		cache:     make(map[string]*list.Element),
 		OnEvicted: OnEvicted,
 	}
+}
+
+// CacheEvicter 缓存淘汰接口
+type CacheEvicter interface {
+	Add(key string, value CacheValue)              // Add 添加缓存值
+	Get(key string) (value CacheValue, exist bool) // Get 根据键获取缓存值，并返回是否存在
+	Update(key string, value CacheValue) error     // Update 修改缓存值
+	Delete(key string) error                       // Delete 删除指定键的缓存值
+	Clear() error                                  // Clear 清除所有缓存值
+	Keys() []string                                // Keys 返回缓存中的所有键
+	Has(key string) bool                           // Has 检查指定键是否存在于缓存中
+	Evict() error                                  // Evict 根据一定的策略驱逐缓存值
+
+	NowSize() int64                         // Size 返回缓存的总大小（以字节为单位）
+	MaxCapacity() int64                     // MaxCapacity 返回缓存的最大容量
+	AdjustCapacity(capacity int64) error    // AdjustCapacity 调整缓存容量大小
+	SetMaxCapacity(maxCapacity int64) error // SetMaxCapacity 设置缓存的最大容量
+}
+
+const NeverTimeout = -1
+
+// CacheValue 缓存值接口
+type CacheValue interface {
+
+	// Size 返回缓存值的大小（以字节为单位）
+	Size() int64
+
+	// Clone 返回缓存值的副本
+	Clone() CacheValue
+
+	// Refresh 刷新缓存值
+	Refresh() error
+
+	// ToString 将缓存值转换为字符串
+	ToString() string
+
+	// CustomMethod 自定义方法，根据需要实现
+	CustomMethod() interface{}
+
+	// SetTimeout 过期时间
+	SetTimeout(timeout int64)
+	// SetNeverExpired 设置永不过期
+	SetNeverExpired()
+	// AdjustTimeout 调整过期时间
+	AdjustTimeout(adjustValue int64)
+	// Expired 检查缓存值是否已过期
+	Expired() bool
 }

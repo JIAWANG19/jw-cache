@@ -2,9 +2,9 @@ package cache
 
 import (
 	"fmt"
-	pb "jw-cache/cachepb"
-	"jw-cache/nodes"
-	"jw-cache/singleflight"
+	pb "jw-cache/src/cachepb"
+	"jw-cache/src/nodes"
+	"jw-cache/src/singleflight"
 	"log"
 	"sync"
 )

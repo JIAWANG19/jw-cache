@@ -2,7 +2,7 @@ package cache
 
 import (
 	"fmt"
-	"jw-cache/cache"
+	"jw-cache/src/cache"
 	"log"
 	"reflect"
 	"testing"

@@ -1,7 +1,7 @@
 package hashes
 
 import (
-	"jw-cache/hashes"
+	"jw-cache/src/hashes"
 	"strconv"
 	"testing"
 )

@@ -1,6 +1,8 @@
 package nodes
 
-import pb "jw-cache/cachepb"
+import (
+	pb "jw-cache/src/cachepb"
+)
 
 type NodePicker interface { // 节点选择器接口
 	PickNode(key string) (node NodeGetter, ok bool)
