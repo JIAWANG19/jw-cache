@@ -71,19 +71,19 @@ func init() {
 
 // Debug Debug
 func Debug(s string, v ...interface{}) {
-	logger.Debugf(s, v)
+	logger.Debugf(s, v...)
 }
 
 // Info Info
 func Info(s string, v ...interface{}) {
-	logger.Infof(s, v)
+	logger.Infof(s, v...)
 }
 
 func Warn(s string, v ...interface{}) {
-	logger.Warnf(s, v)
+	logger.Warnf(s, v...)
 }
 
 // Error Error
 func Error(s string, v ...interface{}) {
-	logger.Errorf(s, v)
+	logger.Errorf(s, v...)
 }

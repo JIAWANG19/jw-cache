@@ -1,6 +1,10 @@
 package main
 
-import "jw-cache/src/pgk/log"
+import (
+	"jw-cache/src/cache/cache_evicter"
+	k "jw-cache/src/cache/cache_key"
+	"jw-cache/src/cache/cache_value"
+)
 
 // 模拟一个数据源
 //var db = map[string]string{
@@ -78,8 +82,10 @@ import "jw-cache/src/pgk/log"
 //}
 
 func main() {
-	log.Info("%s", "123123")
-	log.Info("%s", "123123")
+	stringValue := cache_value.NewStringValue("123123", 10)
+	lruCache := cache_evicter.NewLRUCache(1<<10, nil)
+	key := k.NewKey("123123")
+	lruCache.Add(key, stringValue)
 	//info("123")
 	//startAExample()
 	//var port int
